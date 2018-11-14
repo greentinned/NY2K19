@@ -14,14 +14,13 @@ let state = {}
 window.preload = preload
 
 window.setup = () => {
-  setup(state)
+  state = setup()
 }
 
 window.draw = () => {
-  update(state)
-  draw(state)
+  draw(update(state))
 }
 
 window.windowResized = () => {
-  windowResized(state)
+  windowResized(update(state))
 }

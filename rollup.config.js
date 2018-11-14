@@ -15,7 +15,7 @@ export default {
   output: {
     file: 'public/bundle.js',
     format: 'iife', // immediately-invoked function expression — suitable for <script> tags
-    sourcemap: false
+    sourcemap: !production
   },
   plugins: [
     copy({
