@@ -1,9 +1,10 @@
+import copy from 'rollup-plugin-copy-assets'
 import resolve from 'rollup-plugin-node-resolve'
 import commonjs from 'rollup-plugin-commonjs'
+import babel from 'rollup-plugin-babel'
 import { uglify } from 'rollup-plugin-uglify'
-import livereload from 'rollup-plugin-livereload'
-import copy from 'rollup-plugin-copy-assets'
 import serve from 'rollup-plugin-serve'
+import livereload from 'rollup-plugin-livereload'
 
 // `npm run build` -> `production` is true
 // `npm run dev` -> `production` is false
@@ -14,19 +15,22 @@ export default {
   output: {
     file: 'public/bundle.js',
     format: 'iife', // immediately-invoked function expression — suitable for <script> tags
-    sourcemap: true
+    sourcemap: false
   },
   plugins: [
     copy({
       assets: ['./src/assets', './src/index.html']
     }),
-    resolve(), // tells Rollup how to find date-fns in node_modules
-    commonjs(), // converts date-fns to ES modules
-    production && uglify(), // minify, but only in production
-    serve({
-      contentBase: 'public',
-      port: 3000
+    resolve(),
+    babel({
+      exclude: 'node_modules/**'
     }),
-    livereload()
+    production && uglify(),
+    !production &&
+      serve({
+        contentBase: 'public',
+        port: 3000
+      }),
+    !production && livereload()
   ]
 }
