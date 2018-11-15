@@ -1,4 +1,3 @@
-import 'p5'
 import { preload, setup, update, draw, windowResized } from './sketch'
 
 /**
@@ -18,9 +17,11 @@ window.setup = () => {
 }
 
 window.draw = () => {
-  draw(update(state))
+  state = update(state)
+  draw(state)
 }
 
 window.windowResized = () => {
-  windowResized(update(state))
+  state = update(state)
+  windowResized(state)
 }

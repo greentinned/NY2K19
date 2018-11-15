@@ -22,10 +22,11 @@ export default {
       assets: ['./src/assets', './src/index.html']
     }),
     resolve(),
+    commonjs(),
     babel({
       exclude: 'node_modules/**'
     }),
-    production && uglify(),
+    // production && uglify(),
     !production &&
       serve({
         contentBase: 'public',
