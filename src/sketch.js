@@ -49,6 +49,7 @@ export function update(state) {
       sin(frameCount * 0.01) * 255
     ),
     text: `${round(state.torusSize)}`,
+    peak: peakDetect.isDetected,
     torusSize: peakDetect.isDetected
       ? 80
       : lerp(state.torusSize, state.torusSizeMin, 0.1)
