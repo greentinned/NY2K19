@@ -12,11 +12,15 @@
     "rollup-plugin-livereload": "^0.6.0",
     "rollup-plugin-node-resolve": "^3.3.0",
     "rollup-plugin-serve": "^0.6.0",
-    "rollup-plugin-uglify": "^4.0.0"
+    "rollup-plugin-typescript": "^1.0.0",
+    "rollup-plugin-uglify": "^4.0.0",
+    "tslib": "^1.9.3",
+    "typescript": "^3.1.6"
   },
   "scripts": {
-    "dev": "rollup -c -w",
-    "build": "rm -rf public/ && rollup -c",
+    "clean": "rm -rf public/",
+    "dev": "npm run clean && rollup -c -w",
+    "build": "npm run clean && rollup -c",
     "start": "serve public",
     "deploy": "npm run build && gh-pages -d public"
   }

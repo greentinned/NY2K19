@@ -1,4 +1,11 @@
-import { preload, setup, update, draw, windowResized } from './sketch'
+import {
+  preload,
+  setup,
+  update,
+  draw,
+  windowResized,
+  keyPressed
+} from './sketch'
 
 /**
  * State
@@ -24,4 +31,9 @@ window.draw = () => {
 window.windowResized = () => {
   state = update(state)
   windowResized(state)
+}
+
+window.keyPressed = () => {
+  state = update(state)
+  keyPressed(state)
 }

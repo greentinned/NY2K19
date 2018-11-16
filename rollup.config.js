@@ -25,6 +25,7 @@ export default {
     commonjs(),
     babel({
       exclude: 'node_modules/**'
+      // exclude: /node_modules\/(?!p5)/
     }),
     // production && uglify(),
     !production &&
