@@ -4,7 +4,8 @@ import {
   update,
   draw,
   windowResized,
-  keyPressed
+  keyPressed,
+  mousePressed
 } from './sketch'
 
 /**
@@ -36,4 +37,9 @@ window.windowResized = () => {
 window.keyPressed = () => {
   state = update(state)
   keyPressed(state)
+}
+
+window.mousePressed = () => {
+  state = update(state)
+  mousePressed(state)
 }
