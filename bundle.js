@@ -93593,116 +93593,281 @@
   }));
   });
 
-  /**
-   * Global
-   */
-
-  var font;
-  var mic;
-  var fft;
-  var peakDetect;
-  /**
-   * Lifecycle
-   */
-
-  function preload() {
-    font = loadFont('assets/Akrobat-Bold.otf');
-    fft = new p5$1.FFT();
-    peakDetect = new p5$1.PeakDetect(20, 20000, 0.2);
-    mic = new p5$1.AudioIn();
-    mic.connect(fft);
-    mic.start(); // sound = loadSound('assets/sound.m4a')
-  }
-  function setup() {
-    createCanvas(windowWidth, windowHeight, WEBGL); // sound.play()
-
-    return {
-      fps: 0,
-      text: 'ХУЙ',
-      peak: false,
-      torusSizeMin: 19,
-      torusSize: 19
-    };
-  }
-  function update(state) {
-    fft.analyze();
-    peakDetect.update(fft);
-    return _objectSpread({}, state, {
-      fps: round(frameRate()),
-      textColor: color(sin(frameCount * 0.03) * 255, sin(frameCount * 0.02) * 255, sin(frameCount * 0.01) * 255),
-      text: "".concat(round(state.torusSize)),
-      torusSize: peakDetect.isDetected ? 80 : lerp(state.torusSize, state.torusSizeMin, 0.1)
-    });
-  }
-  function draw(state) {
-    background(50);
-    drawFPS(state);
-    drawText(state);
-    drawTorus(state);
-  }
-  function windowResized(state) {
-    resizeCanvas(windowWidth, windowHeight);
-  }
-  /**
-   * User
-   */
-
-  function drawTorus(state) {
-    push();
-    translate(width / 4, -height / 4, 0);
-    rotateZ(frameCount * 0.01);
-    rotateX(frameCount * 0.01);
-    rotateY(frameCount * 0.01);
-    normalMaterial();
-    torus(state.torusSize, state.torusSize / 4);
-    pop();
-  }
-
-  function drawText(state) {
-    push();
-    fill(state.textColor);
-    textFont(font, 148);
-    var tw = textWidth(state.text);
-    var x = 0 - tw / 2;
-    var y = 0 + 148 / 2;
-    rotateY(frameCount * 0.01);
-    text(state.text, x, y);
-    pop();
-  }
-
-  function drawFPS(state) {
+  function drawDebug(state, font) {
     push();
     fill(255);
     textFont(font);
     var x = -width / 2 + 10;
     var y = -height / 2 + 20;
-    text("FPS: ".concat(state.fps), x, y);
+    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\nQUAD: ").concat(state.editor.editingQuad, "\nPOINT: ").concat(state.editor.editingPoint), x, y);
     pop();
   }
 
   /**
    * State
    */
-
   var state = {};
+  var setState = function setState(newState) {
+    state = _objectSpread({}, state, newState);
+  };
+
+  var EditorStatus = {
+    release: 'release',
+    selectBuffer: 'editing buffer',
+    selectPoint: 'editing point'
+  };
+  var initialEditorState = {
+    status: EditorStatus.release,
+    numberOfQuads: 3,
+    editingQuad: 0,
+    editingPoint: 0
+  };
+  var updateEditorState = function updateEditorState(state, key, mouse) {
+    var status = state.status,
+        numberOfQuads = state.numberOfQuads,
+        editingQuad = state.editingQuad,
+        editingPoint = state.editingPoint;
+
+    if (key) {
+      if (key > 0) {
+        if (status === EditorStatus.release) {
+          if (key <= numberOfQuads) {
+            status = EditorStatus.selectBuffer;
+            editingQuad = parseInt(key);
+          }
+        } else if (status === EditorStatus.selectBuffer) {
+          if (key <= 4) {
+            status = EditorStatus.selectPoint;
+            editingPoint = parseInt(key);
+          }
+        }
+      }
+    } else if (mouse) {
+      status = EditorStatus.release;
+      editingQuad = 0;
+      editingPoint = 0;
+    }
+
+    return {
+      editor: {
+        status: status,
+        numberOfQuads: numberOfQuads,
+        editingQuad: editingQuad,
+        editingPoint: editingPoint
+      }
+    };
+  };
+
+  var initialBuffersState = function initialBuffersState(numberOfQuads, width, height) {
+    var quads = [];
+    var quadWidth = width / numberOfQuads;
+
+    for (var i = 0; i < numberOfQuads; i++) {
+      var origin = {
+        x: i * quadWidth,
+        y: 0
+      };
+      var _quad = {
+        points: [{
+          x: origin.x,
+          y: origin.y
+        }, {
+          x: origin.x + quadWidth,
+          y: origin.y
+        }, {
+          x: origin.x + quadWidth,
+          y: height
+        }, {
+          x: origin.x,
+          y: height
+        }]
+      };
+      quads.push(_quad);
+    }
+
+    return {
+      quads: quads
+    };
+  };
+  var updateBuffersState = function updateBuffersState(state, editingStatus, editingQuad, editingPoint) {
+    var quads = state.quads;
+
+    if (editingStatus === EditorStatus.selectPoint) {
+      var currentQuad = quads[editingQuad - 1];
+
+      if (currentQuad) {
+        var currentPoint = currentQuad.points[editingPoint - 1];
+
+        if (currentPoint) {
+          currentPoint.x = mouseX;
+          currentPoint.y = mouseY;
+          currentQuad.points[editingPoint - 1] = currentPoint;
+        }
+      }
+
+      quads[editingQuad - 1] = currentQuad;
+    }
+
+    return {
+      buffers: {
+        quads: quads
+      }
+    };
+  };
+  var saveBufferState = function saveBufferState(state) {
+    var a = document.createElement('a');
+    var file = new Blob([JSON.stringify(state)], {
+      type: 'text/plain'
+    });
+    a.href = URL.createObjectURL(file);
+    a.download = 'buffers.json';
+    a.click();
+  };
+  var drawBuffer = function drawBuffer(buffer, quadPoints, isEditing, cb) {
+    push();
+    translate(-width / 2, -height / 2);
+    cb(buffer);
+    fill(255, 0, 0);
+
+    if (!isEditing) {
+      texture(buffer);
+    }
+
+    quad(quadPoints[0].x, quadPoints[0].y, quadPoints[1].x, quadPoints[1].y, quadPoints[2].x, quadPoints[2].y, quadPoints[3].x, quadPoints[3].y);
+    pop();
+  };
+
+  /**
+   * Global
+   */
+
+  var canvas;
+  var font;
+  var mic;
+  var fft;
+  var peakDetect;
+  var osBuffer;
+  var antinous;
+  /**
+   * Lifecycle
+   */
+
+  function preload() {
+    font = loadFont('assets/Akrobat-Bold.otf');
+    antinous = loadModel('assets/antinous/model.obj', true);
+  }
+  function setup() {
+    // low band 40Hz-120Hz
+    // lowMid band 140Hz-400Hz
+    // mid band 400Hz-2.6kHz
+    fft = new p5$1.FFT();
+    peakDetect = new p5$1.PeakDetect(20, 20000, 0.05);
+    mic = new p5$1.AudioIn();
+    mic.connect(fft);
+    mic.start();
+    canvas = createCanvas(windowWidth, windowHeight, WEBGL);
+    osBuffer = createGraphics(windowWidth / 3, windowHeight, WEBGL);
+    var buffersState = initialBuffersState(3, windowWidth, windowHeight);
+    setState(_objectSpread({
+      fps: 0,
+      peak: false
+    }, updateBuffersState(buffersState, 0, 0), updateEditorState(initialEditorState, false, false)));
+    print(state);
+  }
+  function update() {
+    fft.analyze();
+    peakDetect.update(fft);
+    setState(_objectSpread({
+      fps: round(frameRate()),
+      peak: peakDetect.isDetected
+    }, updateBuffersState(state.buffers, state.editor.status, state.editor.editingQuad, state.editor.editingPoint)));
+  }
+  function draw() {
+    background(0); // Trails
+    // https://stardustjs.github.io/examples/p5js-integration/
+
+    var isEditing = state.editor.status !== EditorStatus.release; // Buffer 1
+
+    drawBuffer(osBuffer, state.buffers.quads[0].points, isEditing, function () {
+      drawLine(osBuffer, state);
+    }); // Buffer 2
+
+    drawBuffer(osBuffer, state.buffers.quads[1].points, isEditing, function () {
+      drawModel(osBuffer, state);
+    }); // Buffer 3
+
+    drawBuffer(osBuffer, state.buffers.quads[2].points, isEditing, function () {
+      drawLine(osBuffer, state);
+    });
+    drawDebug(state, font);
+  }
+  function keyPressed() {
+    setState(_objectSpread({}, updateEditorState(state.editor, key, false)));
+  }
+  function mousePressed() {
+    setState(_objectSpread({}, updateEditorState(state.editor, false, true)));
+
+    if (getAudioContext().state !== 'running') {
+      getAudioContext().resume();
+    }
+
+    if (key === 's') {
+      saveBufferState(state.buffers);
+    }
+  }
+  function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+  }
+  /**
+   * User
+   */
+
+  function drawModel(buffer, state$$1) {
+    buffer.push();
+    buffer.background(0);
+    buffer.translate(0, 0, 0);
+    buffer.scale(2, 2);
+    buffer.rotateX(radians(180));
+    buffer.rotateY(frameCount * 0.01);
+    buffer.normalMaterial();
+    buffer.model(antinous);
+    buffer.pop();
+    buffer.rect(0, 0, buffer.width, buffer.height);
+  }
+
+  function drawLine(buffer, state$$1) {
+    var waveform = fft.waveform();
+    buffer.background(0);
+    buffer.push();
+    buffer.noFill();
+    buffer.beginShape();
+    buffer.stroke(255, 255, 255);
+    buffer.strokeWeight(1);
+
+    for (var i = 0; i < waveform.length; i++) {
+      var x = map(waveform[i], -1, 1, -buffer.width / 3, buffer.width / 3);
+      var y = map(i, 0, waveform.length, -buffer.height / 2, buffer.height);
+      buffer.vertex(x, y);
+    }
+
+    buffer.endShape();
+    buffer.pop();
+  }
+
   /**
    * Lifecycle
    */
 
   window.preload = preload;
-
-  window.setup = function () {
-    state = setup();
-  };
+  window.setup = setup;
 
   window.draw = function () {
-    state = update(state);
-    draw(state);
+    update();
+    draw();
   };
 
-  window.windowResized = function () {
-    state = update(state);
-    windowResized(state);
-  };
+  window.windowResized = windowResized;
+  window.keyPressed = keyPressed;
+  window.mousePressed = mousePressed;
 
 }());
