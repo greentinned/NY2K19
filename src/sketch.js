@@ -3,15 +3,16 @@ import 'p5/lib/addons/p5.sound'
 
 import { drawDebug } from './debug'
 import { state, setState, saveState, loadState } from './state'
+import { initialBeatState, updateBeatState } from './beat'
+import { initialEditorState, updateEditorState, EditorStatus } from './editor'
+import { initialHeadState, updateHeadState, drawHead } from './head'
+import { initialLogoState, updateLogoState, drawLogo } from './logo'
+import { initialBuffersState, updateBuffersState, drawBuffer } from './buffer'
 import {
   initialRandomEventState,
   updateRandomEventState,
   RandomEventType
 } from './randomEvent'
-import { initialEditorState, updateEditorState, EditorStatus } from './editor'
-import { initialHeadState, updateHeadState, drawHead } from './head'
-import { initialLogoState, updateLogoState, drawLogo } from './logo'
-import { initialBuffersState, updateBuffersState, drawBuffer } from './buffer'
 
 /**
  * Global
@@ -22,7 +23,9 @@ let font
 let sound
 let mic
 let fft
-let peakDetect
+let lowBeatDetect
+let midBeatDetect
+let highBeatDetect
 let osBuffer
 let osBuffer2
 let pastFrame
@@ -47,30 +50,37 @@ export function preload() {
 
 export function setup() {
   noStroke()
-  // low band 40Hz-120Hz
-  // lowMid band 140Hz-400Hz
-  // mid band 400Hz-2.6kHz
+
+  // Beat Detection
   fft = new p5.FFT()
-  peakDetect = new p5.PeakDetect(40, 120, 0.8)
+  // low band 40Hz-120Hz
+  lowBeatDetect = new p5.PeakDetect(40, 120, 0.8)
+  // lowMid band 140Hz-400Hz
+  midBeatDetect = new p5.PeakDetect(140, 2600, 0.5)
+  // mid band 400Hz-2.6kHz
+  highBeatDetect = new p5.PeakDetect(4000, 20000, 0.05)
   mic = new p5.AudioIn()
   mic.connect(fft)
   mic.start()
 
+  // Buffers
+  const bufferWidth = windowWidth / 3
   canvas = createCanvas(windowWidth, windowHeight, WEBGL)
-  osBuffer = createGraphics(windowWidth / 3, windowHeight, WEBGL)
-  osBuffer2 = createGraphics(windowWidth / 3, windowHeight, WEBGL)
-
-  const randomEventState = initialRandomEventState(100, 1000)
+  osBuffer = createGraphics(bufferWidth, windowHeight, WEBGL)
+  osBuffer2 = createGraphics(bufferWidth, windowHeight, WEBGL)
   const buffersState = initialBuffersState(3, windowWidth, windowHeight)
+
+  // Random Event
+  const randomEventState = initialRandomEventState(2500, 5000)
 
   setState({
     fps: 0,
-    peak: false,
-    peakCount: 1,
+    debug: false,
+    ...updateBeatState(initialBeatState, false, false, false),
     ...updateBuffersState(buffersState, 0, 0),
     ...updateEditorState(initialEditorState, false, false),
     ...updateRandomEventState(randomEventState, false, 1),
-    ...updateHeadState(initialHeadState, false, 1, false),
+    ...updateHeadState(initialHeadState, false, 1, false, 0),
     ...updateLogoState(initialLogoState, false, 1, false)
   })
 
@@ -79,24 +89,41 @@ export function setup() {
 
 export function update() {
   fft.analyze()
-  peakDetect.update(fft)
+  lowBeatDetect.update(fft)
+  midBeatDetect.update(fft)
+  highBeatDetect.update(fft)
 
-  const peak = peakDetect.isDetected
-  const peakCount = peak ? state.peakCount + 1 : state.peakCount
+  const lowBeat = lowBeatDetect.isDetected
+  const midBeat = midBeatDetect.isDetected
+  const highBeat = highBeatDetect.isDetected
 
   setState({
     fps: round(frameRate()),
-    peak: peak,
-    peakCount: peakCount,
     ...updateBuffersState(
       state.buffers,
       state.editor.status,
       state.editor.editingQuad,
       state.editor.editingPoint
     ),
-    ...updateRandomEventState(state.randomEvent, peak, peakCount),
-    ...updateHeadState(state.head, peak, peakCount, state.randomEvent.type),
-    ...updateLogoState(state.logo, peak, peakCount, state.randomEvent.type)
+    ...updateBeatState(state.beat, lowBeat, midBeat, highBeat),
+    ...updateRandomEventState(
+      state.randomEvent,
+      state.beat.low,
+      state.beat.lowCount
+    ),
+    ...updateHeadState(
+      state.head,
+      state.beat.low,
+      state.beat.lowCount,
+      state.randomEvent.type,
+      state.beat.kindaBpm
+    ),
+    ...updateLogoState(
+      state.logo,
+      state.beat.low,
+      state.beat.lowCount,
+      state.randomEvent.type
+    )
   })
 }
 
@@ -124,7 +151,7 @@ export function draw() {
     drawLine(osBuffer, state, RandomEventType.right, { r: 255, g: 0, b: 255 })
   })
 
-  drawDebug(state, font)
+  state.debug && drawDebug(state, font)
 }
 
 export function keyPressed() {
@@ -141,6 +168,12 @@ export function keyPressed() {
       setState({
         buffers: json.buffers
       })
+    })
+  }
+
+  if (key === 'd') {
+    setState({
+      debug: !state.debug
     })
   }
 }
@@ -188,7 +221,7 @@ function drawLine(buffer, state, randomEvent, icolor) {
   }
   buffer.endShape()
 
-  if (state.peak) {
+  if (state.beat.low) {
     buffer.beginShape()
     buffer.stroke(osBuffer.color(scolor.r, scolor.g, scolor.b))
     buffer.strokeWeight(8)
