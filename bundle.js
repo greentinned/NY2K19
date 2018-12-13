@@ -93599,7 +93599,7 @@
     textFont(font);
     var x = -width / 2 + 10;
     var y = -height / 2 + 20;
-    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\nQUAD: ").concat(state.editor.editingQuad, "\nPOINT: ").concat(state.editor.editingPoint, "\nPEAK: ").concat(state.peak, "\nPEAK COUNT: ").concat(state.peakCount), x, y);
+    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\n \nLOW: ").concat(state.beat.low, "\nLOW COUNT: ").concat(state.beat.lowCount, "\n \nMID: ").concat(state.beat.mid, "\nMID COUNT: ").concat(state.beat.midCount, "\n \nHIGH: ").concat(state.beat.high, "\nHIGH COUNT: ").concat(state.beat.highCount, "\n \n KINDA BPM: ").concat(state.beat.kindaBpm), x, y);
     pop();
   }
 
@@ -93638,43 +93638,61 @@
     });
   };
 
-  var RandomEventType = {
-    none: 'none',
-    left: 'left',
-    right: 'right'
+  var initialBeatState = {
+    low: false,
+    lowCount: 0,
+    mid: false,
+    midCount: 0,
+    high: false,
+    highCount: 0,
+    kindaBpm: 0,
+    kindaBpmFrames: []
   };
-  var initialRandomEventState = function initialRandomEventState(minTime, maxTime) {
-    return {
-      type: RandomEventType.none,
-      timer: 0,
-      minTime: minTime,
-      maxTime: maxTime
-    };
-  };
+  var kindaBpmMaxBeats = 16;
+  var updateBeatState = function updateBeatState(state, low, mid, high) {
+    var lowCount = state.lowCount,
+        midCount = state.midCount,
+        highCount = state.highCount,
+        kindaBpm = state.kindaBpm,
+        kindaBpmFrames = state.kindaBpmFrames;
+    if (low) lowCount += 1;
+    if (mid) midCount += 1;
+    if (high) highCount += 1;
 
-  var getRandomEventType = function getRandomEventType(types) {
-    var randIndex = round(random(0, Object.keys(types).length - 1));
-    return types[Object.keys(types)[randIndex]];
-  };
-
-  var updateRandomEventState = function updateRandomEventState(state, peak, peakCount) {
-    var type = state.type,
-        timer = state.timer,
-        minTime = state.minTime,
-        maxTime = state.maxTime;
-
-    if (peak && frameCount >= timer) {
-      type = getRandomEventType(RandomEventType);
-      timer = frameCount + random(minTime, maxTime); // next timer
-
-      print('event', type, 'frame', timer);
+    if (low) {
+      kindaBpmFrames.push(frameCount);
     }
 
+    if (kindaBpmFrames.length > kindaBpmMaxBeats) {
+      kindaBpmFrames.shift(); // kindaBpm = kindaBpmFrames[1] - kindaBpmFrames[0]
+
+      var frameNumbers = [];
+
+      for (var i = 0; i < kindaBpmFrames.length; i++) {
+        if (i > 0) {
+          frameNumbers.push(kindaBpmFrames[i] - kindaBpmFrames[i - 1]);
+        }
+      } // Не даем сильно разогнаться
+
+
+      kindaBpm = min(round(frameNumbers.reduce(function (a, b) {
+        return a + b;
+      }) / frameNumbers.length), 60);
+    } // Затормаживаемся если нет бита
+
+
+    kindaBpm = lerp(kindaBpm, 0, 0.003);
     return {
-      randomEvent: _objectSpread({}, state, {
-        type: type,
-        timer: timer
-      })
+      beat: {
+        low: low,
+        mid: mid,
+        high: high,
+        lowCount: lowCount,
+        midCount: midCount,
+        highCount: highCount,
+        kindaBpm: kindaBpm,
+        kindaBpmFrames: kindaBpmFrames
+      }
     };
   };
 
@@ -93725,22 +93743,86 @@
     };
   };
 
+  var RandomEventType = {
+    none: 'none',
+    left: 'left',
+    right: 'right'
+  };
+  var initialRandomEventState = function initialRandomEventState(minTime, maxTime) {
+    return {
+      type: RandomEventType.none,
+      timer: 0,
+      minTime: minTime,
+      maxTime: maxTime
+    };
+  };
+
+  var getRandomEventType = function getRandomEventType(types) {
+    var randIndex = round(random(0, Object.keys(types).length - 1));
+    return types[Object.keys(types)[randIndex]];
+  };
+
+  var updateRandomEventState = function updateRandomEventState(state, peak, peakCount) {
+    var type = state.type,
+        timer = state.timer,
+        minTime = state.minTime,
+        maxTime = state.maxTime;
+
+    if (peak && frameCount >= timer) {
+      type = getRandomEventType(RandomEventType);
+      timer = frameCount + random(minTime, maxTime); // next timer
+    }
+
+    return {
+      randomEvent: _objectSpread({}, state, {
+        type: type,
+        timer: timer
+      })
+    };
+  };
+
   var initialHeadState = {
     xangle: 0,
     yangle: 145,
-    xpos: 60
+    xpos: 60,
+    destXangle: 0,
+    animating: false,
+    cooldown: 50,
+    timer: 0
   };
-  var updateHeadState = function updateHeadState(state, peak, peakCount, randomEvent) {
+  var updateHeadState = function updateHeadState(state, lowBeat, lowBeatCount, randomEvent, kindaBpm) {
     var xangle = state.xangle,
         yangle = state.yangle,
-        xpos = state.xpos; // Кивок головой
+        xpos = state.xpos,
+        timer = state.timer,
+        cooldown = state.cooldown,
+        animating = state.animating,
+        destXangle = state.destXangle; // fps/(2 * angle / (speedUp + speedDown))
+    // 2 * angle / (x + x/4) = kindaBpm
+    // (x + x/4) = kindaBpm / 2 * angle
+    // 1.25x = kindaBpm / 2 * angle
+    // x = (kindaBpm / 2 * angle)/1.25
+    // Кивок головой
+    // let speed = 0.2
+    // if (round(xangle) === 0) {
+    //   destXangle = 15
+    // } else if (round(xangle) === 15) {
+    //   speed = 0.05
+    //   destXangle = 0
+    // }
 
-    var destXangle = 15;
-    var speed = 0.1;
+    var angle = 15;
+    var speed = kindaBpm / (2 * angle) / 1.75 / 4;
 
-    if (peak) {
-      destXangle = destXangle === 15 ? 0 : 15;
-      speed = destXangle === 15 ? 0.05 : 0.1;
+    if (round(xangle) === 0) {
+      destXangle = angle;
+    } else if (round(xangle) === angle) {
+      destXangle = 0;
+    } // Периодическая синхронизация с битом
+
+
+    if (lowBeatCount % kindaBpm === 0) {
+      destXangle = 0;
     } // Поворот головы
 
 
@@ -93751,7 +93833,11 @@
       head: {
         xangle: lerp(state.xangle, destXangle, speed),
         yangle: lerp(state.yangle, destYangle, 0.05),
-        xpos: lerp(state.xpos, destXpos, 0.05)
+        xpos: lerp(state.xpos, destXpos, 0.05),
+        destXangle: destXangle,
+        animating: animating,
+        cooldown: cooldown,
+        timer: timer
       }
     };
   };
@@ -93763,7 +93849,7 @@
     buffer.translate(xpos, 0, 20);
     buffer.scale(1.8, 1.8);
     buffer.rotateY(radians(yangle) + radians(sin(frameCount * 0.05) * 4));
-    buffer.rotateX(radians(180) - radians(xangle));
+    buffer.rotateX(radians(180) + radians(xangle));
     buffer.normalMaterial();
     buffer.model(model);
     buffer.pop();
@@ -93902,7 +93988,9 @@
   var font;
   var mic;
   var fft;
-  var peakDetect;
+  var lowBeatDetect;
+  var midBeatDetect;
+  var highBeatDetect;
   var osBuffer;
   var osBuffer2;
   var mosaicShader;
@@ -93919,37 +94007,43 @@
     mosaicShader = loadShader('assets/shaders/mosaic.vert', 'assets/shaders/mosaic.frag');
   }
   function setup() {
-    noStroke(); // low band 40Hz-120Hz
-    // lowMid band 140Hz-400Hz
-    // mid band 400Hz-2.6kHz
+    noStroke(); // Beat Detection
 
-    fft = new p5$1.FFT();
-    peakDetect = new p5$1.PeakDetect(40, 120, 0.8);
+    fft = new p5$1.FFT(); // low band 40Hz-120Hz
+
+    lowBeatDetect = new p5$1.PeakDetect(40, 120, 0.8); // lowMid band 140Hz-400Hz
+
+    midBeatDetect = new p5$1.PeakDetect(140, 2600, 0.5); // mid band 400Hz-2.6kHz
+
+    highBeatDetect = new p5$1.PeakDetect(4000, 20000, 0.05);
     mic = new p5$1.AudioIn();
     mic.connect(fft);
-    mic.start();
+    mic.start(); // Buffers
+
+    var bufferWidth = windowWidth / 3;
     canvas = createCanvas(windowWidth, windowHeight, WEBGL);
-    osBuffer = createGraphics(windowWidth / 3, windowHeight, WEBGL);
-    osBuffer2 = createGraphics(windowWidth / 3, windowHeight, WEBGL);
-    var randomEventState = initialRandomEventState(100, 1000);
-    var buffersState = initialBuffersState(3, windowWidth, windowHeight);
+    osBuffer = createGraphics(bufferWidth, windowHeight, WEBGL);
+    osBuffer2 = createGraphics(bufferWidth, windowHeight, WEBGL);
+    var buffersState = initialBuffersState(3, windowWidth, windowHeight); // Random Event
+
+    var randomEventState = initialRandomEventState(2500, 5000);
     setState(_objectSpread({
       fps: 0,
-      peak: false,
-      peakCount: 1
-    }, updateBuffersState(buffersState, 0, 0), updateEditorState(initialEditorState, false, false), updateRandomEventState(randomEventState, false, 1), updateHeadState(initialHeadState, false, 1, false), updateLogoState(initialLogoState, false, 1, false)));
+      debug: false
+    }, updateBeatState(initialBeatState, false, false, false), updateBuffersState(buffersState, 0, 0), updateEditorState(initialEditorState, false, false), updateRandomEventState(randomEventState, false, 1), updateHeadState(initialHeadState, false, 1, false, 0), updateLogoState(initialLogoState, false, 1, false)));
     print(state);
   }
   function update() {
     fft.analyze();
-    peakDetect.update(fft);
-    var peak = peakDetect.isDetected;
-    var peakCount = peak ? state.peakCount + 1 : state.peakCount;
+    lowBeatDetect.update(fft);
+    midBeatDetect.update(fft);
+    highBeatDetect.update(fft);
+    var lowBeat = lowBeatDetect.isDetected;
+    var midBeat = midBeatDetect.isDetected;
+    var highBeat = highBeatDetect.isDetected;
     setState(_objectSpread({
-      fps: round(frameRate()),
-      peak: peak,
-      peakCount: peakCount
-    }, updateBuffersState(state.buffers, state.editor.status, state.editor.editingQuad, state.editor.editingPoint), updateRandomEventState(state.randomEvent, peak, peakCount), updateHeadState(state.head, peak, peakCount, state.randomEvent.type), updateLogoState(state.logo, peak, peakCount, state.randomEvent.type)));
+      fps: round(frameRate())
+    }, updateBuffersState(state.buffers, state.editor.status, state.editor.editingQuad, state.editor.editingPoint), updateBeatState(state.beat, lowBeat, midBeat, highBeat), updateRandomEventState(state.randomEvent, state.beat.low, state.beat.lowCount), updateHeadState(state.head, state.beat.low, state.beat.lowCount, state.randomEvent.type, state.beat.kindaBpm), updateLogoState(state.logo, state.beat.low, state.beat.lowCount, state.randomEvent.type)));
   }
   function draw() {
     background(0); // Trails
@@ -93977,7 +94071,7 @@
         b: 255
       });
     });
-    drawDebug(state, font);
+    state.debug && drawDebug(state, font);
   }
   function keyPressed() {
     setState(_objectSpread({}, updateEditorState(state.editor, key, false)));
@@ -93991,6 +94085,12 @@
         setState({
           buffers: json.buffers
         });
+      });
+    }
+
+    if (key === 'd') {
+      setState({
+        debug: !state.debug
       });
     }
   }
@@ -94033,9 +94133,9 @@
       buffer.vertex(x, y);
     }
 
-    buffer.endShape(); // if (state.peak && state.peakCount % 2 === 0) {
+    buffer.endShape();
 
-    if (state$$1.peak) {
+    if (state$$1.beat.low) {
       buffer.beginShape();
       buffer.stroke(osBuffer.color(scolor.r, scolor.g, scolor.b));
       buffer.strokeWeight(8);
