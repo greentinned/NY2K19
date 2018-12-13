@@ -93599,7 +93599,7 @@
     textFont(font);
     var x = -width / 2 + 10;
     var y = -height / 2 + 20;
-    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\nQUAD: ").concat(state.editor.editingQuad, "\nPOINT: ").concat(state.editor.editingPoint), x, y);
+    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\nQUAD: ").concat(state.editor.editingQuad, "\nPOINT: ").concat(state.editor.editingPoint, "\nPEAK: ").concat(state.peak, "\nPEAK COUNT: ").concat(state.peakCount), x, y);
     pop();
   }
 
@@ -93609,6 +93609,73 @@
   var state = {};
   var setState = function setState(newState) {
     state = _objectSpread({}, state, newState);
+  };
+  var saveState = function saveState(state, download) {
+    var a = document.createElement('a');
+    var file = new Blob([JSON.stringify(state)], {
+      type: 'text/plain'
+    });
+    a.href = URL.createObjectURL(file);
+
+    if (download) {
+      a.download = 'state.json';
+    } else {
+      a.target = '_blank';
+    }
+
+    a.click();
+  };
+  var loadState = function loadState(cb) {
+    var user = 'greentinned';
+    var gistHash = '144f80e88e4ba0b3ca7572a67e65725d';
+    var file = 'ny2k19State.json';
+    var commitHash = window.location.hash.replace('#', '/');
+    var url = "https://gist.githubusercontent.com/".concat(user, "/").concat(gistHash, "/raw").concat(commitHash ? commitHash : '', "/").concat(file);
+    fetch(url).then(function (response) {
+      return response.json();
+    }).then(function (json) {
+      cb(JSON.parse(JSON.stringify(json)));
+    });
+  };
+
+  var RandomEventType = {
+    none: 'none',
+    left: 'left',
+    right: 'right'
+  };
+  var initialRandomEventState = function initialRandomEventState(minTime, maxTime) {
+    return {
+      type: RandomEventType.none,
+      timer: 0,
+      minTime: minTime,
+      maxTime: maxTime
+    };
+  };
+
+  var getRandomEventType = function getRandomEventType(types) {
+    var randIndex = round(random(0, Object.keys(types).length - 1));
+    return types[Object.keys(types)[randIndex]];
+  };
+
+  var updateRandomEventState = function updateRandomEventState(state, peak, peakCount) {
+    var type = state.type,
+        timer = state.timer,
+        minTime = state.minTime,
+        maxTime = state.maxTime;
+
+    if (peak && frameCount >= timer) {
+      type = getRandomEventType(RandomEventType);
+      timer = frameCount + random(minTime, maxTime); // next timer
+
+      print('event', type, 'frame', timer);
+    }
+
+    return {
+      randomEvent: _objectSpread({}, state, {
+        type: type,
+        timer: timer
+      })
+    };
   };
 
   var EditorStatus = {
@@ -93655,6 +93722,104 @@
         editingQuad: editingQuad,
         editingPoint: editingPoint
       }
+    };
+  };
+
+  var initialHeadState = {
+    xangle: 0,
+    yangle: 145,
+    xpos: 60
+  };
+  var updateHeadState = function updateHeadState(state, peak, peakCount, randomEvent) {
+    var xangle = state.xangle,
+        yangle = state.yangle,
+        xpos = state.xpos; // Кивок головой
+
+    var destXangle = 15;
+    var speed = 0.1;
+
+    if (peak) {
+      destXangle = destXangle === 15 ? 0 : 15;
+      speed = destXangle === 15 ? 0.05 : 0.1;
+    } // Поворот головы
+
+
+    var destYangle = randomEvent === RandomEventType.left ? 145 : 225; // Смещение головы
+
+    var destXpos = randomEvent === RandomEventType.left ? 60 : -60;
+    return {
+      head: {
+        xangle: lerp(state.xangle, destXangle, speed),
+        yangle: lerp(state.yangle, destYangle, 0.05),
+        xpos: lerp(state.xpos, destXpos, 0.05)
+      }
+    };
+  };
+  var drawHead = function drawHead(state, buffer, model) {
+    var xangle = state.xangle,
+        yangle = state.yangle,
+        xpos = state.xpos;
+    buffer.push();
+    buffer.translate(xpos, 0, 20);
+    buffer.scale(1.8, 1.8);
+    buffer.rotateY(radians(yangle) + radians(sin(frameCount * 0.05) * 4));
+    buffer.rotateX(radians(180) - radians(xangle));
+    buffer.normalMaterial();
+    buffer.model(model);
+    buffer.pop();
+  };
+
+  var LogoSide = {
+    left: 0,
+    right: 1
+  };
+  var initialLogoState = {
+    side: LogoSide.left
+  };
+  var updateLogoState = function updateLogoState(state, peak, peakCount, randomEvent) {
+    var side = state.side;
+    side = randomEvent === RandomEventType.left ? LogoSide.left : LogoSide.right;
+    return {
+      logo: {
+        side: side
+      }
+    };
+  };
+  var drawLogo = function drawLogo(state, buffer, img) {
+    var side = state.side;
+    var bufferWidth = buffer.width;
+    var bufferHeight = buffer.height;
+    var imgRect = rectToFit(img.width, img.height, null, bufferHeight);
+    var imgX;
+
+    if (side === LogoSide.left) {
+      imgX = -bufferWidth / 2 + imgRect.width / 2;
+    } else {
+      imgX = bufferWidth / 2 - imgRect.width / 2;
+    }
+
+    buffer.texture(img);
+    buffer.push();
+    buffer.translate(imgX, 0, 0);
+    buffer.plane(imgRect.width, imgRect.height);
+    buffer.pop();
+  };
+  var rectToFit = function rectToFit(srcWidth, srcHeight, destWidth, destHeight) {
+    var srcRatio = srcWidth / srcHeight;
+    var dWidth = srcWidth;
+    var dHeight = srcHeight;
+
+    if (destWidth) {
+      dWidth = destWidth;
+      dHeight = destWidth / srcRatio;
+    } else if (destHeight) {
+      dWidth = destHeight * srcRatio;
+      dHeight = destHeight;
+    }
+
+    return {
+      width: dWidth,
+      height: dHeight
     };
   };
 
@@ -93714,18 +93879,10 @@
       }
     };
   };
-  var saveBufferState = function saveBufferState(state) {
-    var a = document.createElement('a');
-    var file = new Blob([JSON.stringify(state)], {
-      type: 'text/plain'
-    });
-    a.href = URL.createObjectURL(file);
-    a.download = 'buffers.json';
-    a.click();
-  };
   var drawBuffer = function drawBuffer(buffer, quadPoints, isEditing, cb) {
     push();
     translate(-width / 2, -height / 2);
+    buffer.background(0);
     cb(buffer);
     fill(255, 0, 0);
 
@@ -93747,7 +93904,10 @@
   var fft;
   var peakDetect;
   var osBuffer;
+  var osBuffer2;
+  var mosaicShader;
   var antinous;
+  var nocheImage;
   /**
    * Lifecycle
    */
@@ -93755,32 +93915,41 @@
   function preload() {
     font = loadFont('assets/Akrobat-Bold.otf');
     antinous = loadModel('assets/antinous/model.obj', true);
+    nocheImage = loadImage('assets/logo/noche.png');
+    mosaicShader = loadShader('assets/shaders/mosaic.vert', 'assets/shaders/mosaic.frag');
   }
   function setup() {
-    // low band 40Hz-120Hz
+    noStroke(); // low band 40Hz-120Hz
     // lowMid band 140Hz-400Hz
     // mid band 400Hz-2.6kHz
+
     fft = new p5$1.FFT();
-    peakDetect = new p5$1.PeakDetect(20, 20000, 0.05);
+    peakDetect = new p5$1.PeakDetect(40, 120, 0.8);
     mic = new p5$1.AudioIn();
     mic.connect(fft);
     mic.start();
     canvas = createCanvas(windowWidth, windowHeight, WEBGL);
     osBuffer = createGraphics(windowWidth / 3, windowHeight, WEBGL);
+    osBuffer2 = createGraphics(windowWidth / 3, windowHeight, WEBGL);
+    var randomEventState = initialRandomEventState(100, 1000);
     var buffersState = initialBuffersState(3, windowWidth, windowHeight);
     setState(_objectSpread({
       fps: 0,
-      peak: false
-    }, updateBuffersState(buffersState, 0, 0), updateEditorState(initialEditorState, false, false)));
+      peak: false,
+      peakCount: 1
+    }, updateBuffersState(buffersState, 0, 0), updateEditorState(initialEditorState, false, false), updateRandomEventState(randomEventState, false, 1), updateHeadState(initialHeadState, false, 1, false), updateLogoState(initialLogoState, false, 1, false)));
     print(state);
   }
   function update() {
     fft.analyze();
     peakDetect.update(fft);
+    var peak = peakDetect.isDetected;
+    var peakCount = peak ? state.peakCount + 1 : state.peakCount;
     setState(_objectSpread({
       fps: round(frameRate()),
-      peak: peakDetect.isDetected
-    }, updateBuffersState(state.buffers, state.editor.status, state.editor.editingQuad, state.editor.editingPoint)));
+      peak: peak,
+      peakCount: peakCount
+    }, updateBuffersState(state.buffers, state.editor.status, state.editor.editingQuad, state.editor.editingPoint), updateRandomEventState(state.randomEvent, peak, peakCount), updateHeadState(state.head, peak, peakCount, state.randomEvent.type), updateLogoState(state.logo, peak, peakCount, state.randomEvent.type)));
   }
   function draw() {
     background(0); // Trails
@@ -93789,30 +93958,47 @@
     var isEditing = state.editor.status !== EditorStatus.release; // Buffer 1
 
     drawBuffer(osBuffer, state.buffers.quads[0].points, isEditing, function () {
-      drawLine(osBuffer, state);
+      drawLine(osBuffer, state, RandomEventType.left, {
+        r: 0,
+        g: 0,
+        b: 255
+      });
     }); // Buffer 2
 
-    drawBuffer(osBuffer, state.buffers.quads[1].points, isEditing, function () {
-      drawModel(osBuffer, state);
+    drawBuffer(osBuffer2, state.buffers.quads[1].points, isEditing, function () {
+      drawLogo(state.logo, osBuffer2, nocheImage);
+      drawHead(state.head, osBuffer2, antinous);
     }); // Buffer 3
 
     drawBuffer(osBuffer, state.buffers.quads[2].points, isEditing, function () {
-      drawLine(osBuffer, state);
+      drawLine(osBuffer, state, RandomEventType.right, {
+        r: 255,
+        g: 0,
+        b: 255
+      });
     });
     drawDebug(state, font);
   }
   function keyPressed() {
     setState(_objectSpread({}, updateEditorState(state.editor, key, false)));
+
+    if (key === 's') {
+      saveState(state);
+    }
+
+    if (key === 'l') {
+      loadState(function (json) {
+        setState({
+          buffers: json.buffers
+        });
+      });
+    }
   }
   function mousePressed() {
     setState(_objectSpread({}, updateEditorState(state.editor, false, true)));
 
     if (getAudioContext().state !== 'running') {
       getAudioContext().resume();
-    }
-
-    if (key === 's') {
-      saveBufferState(state.buffers);
     }
   }
   function windowResized() {
@@ -93822,27 +94008,24 @@
    * User
    */
 
-  function drawModel(buffer, state$$1) {
-    buffer.push();
-    buffer.background(0);
-    buffer.translate(0, 0, 0);
-    buffer.scale(2, 2);
-    buffer.rotateX(radians(180));
-    buffer.rotateY(frameCount * 0.01);
-    buffer.normalMaterial();
-    buffer.model(antinous);
-    buffer.pop();
-    buffer.rect(0, 0, buffer.width, buffer.height);
-  }
-
-  function drawLine(buffer, state$$1) {
+  function drawLine(buffer, state$$1, randomEvent, icolor) {
     var waveform = fft.waveform();
-    buffer.background(0);
+    var scolor = state$$1.randomEvent.type === randomEvent ? icolor //{ r: 0, g: 0, b: 0 }
+    : {
+      r: 255,
+      g: 255,
+      b: 255
+    };
     buffer.push();
     buffer.noFill();
+
+    if (state$$1.randomEvent.type === randomEvent) {
+      buffer.rotateZ(frameCount * 0.01);
+    }
+
     buffer.beginShape();
-    buffer.stroke(255, 255, 255);
-    buffer.strokeWeight(1);
+    buffer.stroke(osBuffer.color(scolor.r, scolor.g, scolor.b, 128));
+    buffer.strokeWeight(2);
 
     for (var i = 0; i < waveform.length; i++) {
       var x = map(waveform[i], -1, 1, -buffer.width / 3, buffer.width / 3);
@@ -93850,7 +94033,22 @@
       buffer.vertex(x, y);
     }
 
-    buffer.endShape();
+    buffer.endShape(); // if (state.peak && state.peakCount % 2 === 0) {
+
+    if (state$$1.peak) {
+      buffer.beginShape();
+      buffer.stroke(osBuffer.color(scolor.r, scolor.g, scolor.b));
+      buffer.strokeWeight(8);
+
+      for (var i = 0; i < waveform.length; i++) {
+        var x = map(waveform[i], -1, 1, -buffer.width / 3, buffer.width / 3);
+        var y = map(i, 0, waveform.length, -buffer.height / 2, buffer.height);
+        buffer.vertex(x, y);
+      }
+
+      buffer.endShape();
+    }
+
     buffer.pop();
   }
 
