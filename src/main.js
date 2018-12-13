@@ -9,37 +9,17 @@ import {
 } from './sketch'
 
 /**
- * State
- */
-
-let state = {}
-
-/**
  * Lifecycle
  */
 
 window.preload = preload
-
-window.setup = () => {
-  state = setup()
-}
+window.setup = setup
 
 window.draw = () => {
-  state = update(state)
-  draw(state)
+  update()
+  draw()
 }
 
-window.windowResized = () => {
-  state = update(state)
-  windowResized(state)
-}
-
-window.keyPressed = () => {
-  state = update(state)
-  keyPressed(state)
-}
-
-window.mousePressed = () => {
-  state = update(state)
-  mousePressed(state)
-}
+window.windowResized = windowResized
+window.keyPressed = keyPressed
+window.mousePressed = mousePressed

@@ -15,11 +15,12 @@ export default {
   output: {
     file: 'public/bundle.js',
     format: 'iife', // immediately-invoked function expression — suitable for <script> tags
+    name: 'main',
     sourcemap: !production
   },
   plugins: [
     copy({
-      assets: ['./src/assets', './src/index.html']
+      assets: ['./src/assets', './src/index.html', './src/service-worker.js']
     }),
     resolve(),
     commonjs(),
