@@ -93599,7 +93599,7 @@
     textFont(font);
     var x = -width / 2 + 10;
     var y = -height / 2 + 20;
-    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\n \nLOW: ").concat(state.beat.low, "\nLOW COUNT: ").concat(state.beat.lowCount, "\n \nMID: ").concat(state.beat.mid, "\nMID COUNT: ").concat(state.beat.midCount, "\n \nHIGH: ").concat(state.beat.high, "\nHIGH COUNT: ").concat(state.beat.highCount, "\n \n KINDA BPM: ").concat(state.beat.kindaBpm), x, y);
+    text("FPS: ".concat(state.fps, "\nEDITOR: ").concat(state.editor.status, "\n \nLOW: ").concat(state.beat.low, "\nLOW COUNT: ").concat(state.beat.lowCount, "\n \nMID: ").concat(state.beat.mid, "\nMID COUNT: ").concat(state.beat.midCount, "\n \nHIGH: ").concat(state.beat.high, "\nHIGH COUNT: ").concat(state.beat.highCount, "\n \n KINDA BPM: ").concat(round(state.beat.kindaBpm)), x, y);
     pop();
   }
 
